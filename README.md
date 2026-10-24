@@ -62,8 +62,8 @@
 
 ### 2. Tải mã nguồn về máy (Clone Repository)
 ```bash
-git clone https://github.com/your-username/LinguLearn.git
-cd LinguLearn
+git clone https://github.com/PammLong/LinguLearn2
+cd LinguLearn2
 ```
 
 ---
