@@ -1,11 +1,22 @@
 import React from "react";
-import { View, Text, SafeAreaView, ScrollView, TouchableOpacity } from "react-native";
+import { View, Text, SafeAreaView, ScrollView, TouchableOpacity, Alert } from "react-native";
 import { useAuthStore } from "../../store/useAuthStore";
 import { Button } from "../../components/common/Button";
 import { CEFR_LEVELS } from "../../constants";
+import { logoutUser } from "../../services/authService";
 
 export const ProfileScreen = () => {
   const { user, targetLanguage, currentLevel, setCurrentLevel, logout } = useAuthStore();
+
+  const handleLogout = async () => {
+    try {
+      await logoutUser();
+    } catch (e) {
+      console.warn("Lỗi đăng xuất Firebase:", e);
+    } finally {
+      logout();
+    }
+  };
 
   return (
     <SafeAreaView className="flex-1 bg-slate-50">
@@ -61,11 +72,10 @@ export const ProfileScreen = () => {
           size="md"
           className="border-red-500"
           textClassName="text-red-500"
-          onPress={logout}
+          onPress={handleLogout}
         />
         <View className="h-10" />
       </ScrollView>
     </SafeAreaView>
   );
 };
-
