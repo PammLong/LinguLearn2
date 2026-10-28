@@ -1,13 +1,13 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, SafeAreaView, TouchableOpacity, Alert } from "react-native";
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
-import { auth } from "../../services/firebaseConfig";
+import { registerUser, loginUser } from "../../services/authService";
 import { useAuthStore } from "../../store/useAuthStore";
 import { Button } from "../../components/common/Button";
 
 export const LoginScreen = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [isRegistering, setIsRegistering] = useState(false);
   const [loading, setLoading] = useState(false);
   const { setUser } = useAuthStore();
@@ -18,18 +18,23 @@ export const LoginScreen = () => {
       return;
     }
 
+    if (isRegistering && !displayName.trim()) {
+      Alert.alert("Thông báo", "Vui lòng nhập họ và tên của bạn!");
+      return;
+    }
+
     setLoading(true);
     try {
-      let userCredential;
+      let result;
       if (isRegistering) {
-        userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        result = await registerUser(email, password, displayName);
       } else {
-        userCredential = await signInWithEmailAndPassword(auth, email, password);
+        result = await loginUser(email, password);
       }
-      setUser(userCredential.user);
+      setUser(result.user);
     } catch (error) {
-      console.error("Lỗi đăng nhập:", error);
-      Alert.alert("Lỗi", error.message || "Đăng nhập thất bại.");
+      console.error("Lỗi xác thực:", error);
+      Alert.alert("Lỗi", error.message || "Xác thực thất bại.");
     } finally {
       setLoading(false);
     }
@@ -55,6 +60,21 @@ export const LoginScreen = () => {
             {isRegistering ? "Tạo tài khoản học mới" : "Đăng nhập vào tài khoản của bạn"}
           </Text>
         </View>
+
+        {/* Display name input (Chỉ hiển thị khi Đăng ký) */}
+        {isRegistering && (
+          <View className="mb-4">
+            <Text className="text-xs font-bold text-slate-700 mb-1">Họ và tên</Text>
+            <TextInput
+              className="bg-slate-100 rounded-xl px-4 py-3 text-slate-800"
+              placeholder="Nguyễn Văn A"
+              placeholderTextColor="#94a3b8"
+              value={displayName}
+              onChangeText={setDisplayName}
+              autoCapitalize="words"
+            />
+          </View>
+        )}
 
         {/* Email input */}
         <Text className="text-xs font-bold text-slate-700 mb-1">Email</Text>
@@ -89,7 +109,7 @@ export const LoginScreen = () => {
           className="mb-3"
         />
 
-        {/* Chế độ khách (để tiện test ngay không cần setup Firebase Auth trước) */}
+        {/* Chế độ khách */}
         <Button
           title="Trải nghiệm ngay (Chế độ khách)"
           variant="outline"
@@ -112,4 +132,3 @@ export const LoginScreen = () => {
     </SafeAreaView>
   );
 };
-

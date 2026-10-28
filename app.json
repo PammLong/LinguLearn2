@@ -4,7 +4,6 @@
     "slug": "lingulearn",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
       "backgroundColor": "#ffffff"
@@ -14,14 +13,7 @@
       "bundleIdentifier": "com.lingulearn.app"
     },
     "android": {
-      "adaptiveIcon": {
-        "backgroundColor": "#ffffff"
-      },
       "package": "com.lingulearn.app"
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
     }
   }
 }
-
