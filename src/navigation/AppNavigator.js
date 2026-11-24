@@ -6,6 +6,7 @@ import { auth } from "../services/firebaseConfig";
 import { LoginScreen } from "../screens/LoginScreen";
 import { RegisterScreen } from "../screens/RegisterScreen";
 import { HomeScreen } from "../screens/HomeScreen";
+import { ChatScreen } from "../screens/ChatScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -41,7 +42,10 @@ export const AppNavigator = () => {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {user ? (
         // Khi đã đăng nhập (user tồn tại)
-        <Stack.Screen name="Home" component={HomeScreen} />
+        <>
+          <Stack.Screen name="Home" component={HomeScreen} />
+          <Stack.Screen name="Chat" component={ChatScreen} />
+        </>
       ) : (
         // Khi chưa đăng nhập (!user)
         <>
@@ -54,4 +58,3 @@ export const AppNavigator = () => {
 };
 
 export default AppNavigator;
-

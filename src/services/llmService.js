@@ -1,172 +1,231 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+/**
+ * Dịch vụ giao tiếp với Google Gemini LLM API cho ứng dụng LinguLearn
+ * Sử dụng fetch gọi trực tiếp REST API của mô hình gemini-2.5-flash
+ */
 
-// Lấy API Key từ biến môi trường
-const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || "";
-
-const genAI = GEMINI_API_KEY ? new GoogleGenerativeAI(GEMINI_API_KEY) : null;
-
-// Khởi tạo model Gemini (sử dụng gemini-1.5-flash để phản hồi nhanh và chi phí tối ưu trên mobile)
-const getModel = (modelName = "gemini-1.5-flash") => {
-  if (!genAI) {
-    console.warn("Cảnh báo: Chưa cấu hình EXPO_PUBLIC_GEMINI_API_KEY trong file .env!");
-    return null;
-  }
-  return genAI.getGenerativeModel({ model: modelName });
-};
+const GEMINI_API_BASE_URL =
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
 /**
- * Trợ giúp phân tích chuỗi JSON trả về từ LLM (bóc tách markdown block nếu có)
+ * 1. Gửi tin nhắn trò chuyện với Gia sư AI (LinguTutor)
+ * @param {string|object} userMessage - Tin nhắn từ người dùng (hoặc object config)
+ * @param {string} targetLanguage - Ngôn ngữ đang học (mặc định: 'English')
+ * @param {string} level - Trình độ CEFR của học viên (mặc định: 'B1')
+ * @param {Array} chatHistory - Lịch sử hội thoại trước đó [{ role: 'user'|'model', text: '...' }]
+ * @returns {Promise<{ reply: string, correctedGrammar: string, explanation: string }>}
  */
-const extractJsonFromResponse = (text) => {
-  try {
-    const cleanedText = text
-      .replace(/```json/gi, "")
-      .replace(/```/g, "")
-      .trim();
-    return JSON.parse(cleanedText);
-  } catch (error) {
-    console.error("Lỗi parse JSON từ Gemini:", error, "\nRaw text:", text);
-    throw new Error("Không thể định dạng dữ liệu từ AI. Vui lòng thử lại!");
-  }
-};
-
-/**
- * 1. Giao tiếp với gia sư AI (AI Language Tutor)
- * Trò chuyện tự nhiên, kèm gợi ý sửa lỗi ngữ pháp nếu người học viết sai.
- * @param {Array} history - Danh sách hội thoại trước đó [{ role: 'user' | 'model', parts: [{ text }] }]
- * @param {string} userMessage - Tin nhắn của người học
- * @param {string} targetLanguage - Ngôn ngữ đang học (ví dụ: "Tiếng Anh")
- * @param {string} userLevel - Cấp độ người học (ví dụ: "A2 - Sơ cấp")
- */
-export const chatWithAITutor = async ({
-  history = [],
+export const sendMessageToTutor = async (
   userMessage,
-  targetLanguage = "Tiếng Anh",
-  userLevel = "B1",
-}) => {
-  const model = getModel();
+  targetLanguage = "English",
+  level = "B1",
+  chatHistory = []
+) => {
+  // Hỗ trợ cả 2 cách gọi: truyền từng tham số hoặc truyền 1 object config
+  let actualMessage = userMessage;
+  let actualLang = targetLanguage;
+  let actualLevel = level;
+  let actualHistory = chatHistory;
 
-  if (!model) {
-    // Phản hồi giả lập nếu chưa có API Key để test UI
+  if (typeof userMessage === "object" && userMessage !== null) {
+    actualMessage = userMessage.userMessage || userMessage.text || "";
+    actualLang = userMessage.targetLanguage || targetLanguage;
+    actualLevel = userMessage.level || userMessage.userLevel || level;
+    actualHistory = userMessage.chatHistory || userMessage.history || chatHistory;
+  }
+
+  const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+
+  if (!apiKey) {
+    console.warn(
+      "Cảnh báo: Chưa cấu hình EXPO_PUBLIC_GEMINI_API_KEY trong file .env!"
+    );
     return {
-      tutorResponse: `[Demo] Chào bạn! Tôi là gia sư ảo LinguLearn. Bạn vừa nói: "${userMessage}". Hãy thêm EXPO_PUBLIC_GEMINI_API_KEY vào .env để kích hoạt AI thực tế nhé!`,
-      correction: null,
+      reply: `[Demo] Chào bạn! Tôi là gia sư LinguTutor. Bạn vừa nói: "${actualMessage}". Hãy cấu hình EXPO_PUBLIC_GEMINI_API_KEY để trò chuyện cùng AI thực tế nhé!`,
+      correctedGrammar: "",
+      explanation: "",
     };
   }
 
-  const systemInstruction = `
-Bạn là gia sư AI dạy ngoại ngữ thân thiện, nhiệt huyết tên là "LinguTutor" trong ứng dụng "LinguLearn".
-- Ngôn ngữ đang dạy: ${targetLanguage}.
-- Trình độ của học viên: ${userLevel}.
-- Nhiệm vụ:
-  1. Trả lời học viên bằng giọng văn tự nhiên, khuyến khích trò chuyện, đặt thêm 1 câu hỏi mở để tiếp tục hội thoại.
-  2. Kiểm tra ngữ pháp và từ vựng câu học viên vừa gửi. Nếu có lỗi, giải thích ngắn gọn, dễ hiểu bằng tiếng Việt và đưa ra câu sửa chuẩn xác.
-- ĐỊNH DẠNG TRẢ VỀ: BẮT BUỘC trả về duy nhất 1 JSON object (không kèm markdown bên ngoài):
+  // System Instruction định hình vai trò và ép buộc định dạng JSON
+  const systemInstructionText = `
+Bạn là "LinguTutor", một gia sư ngoại ngữ AI thân thiện, tận tâm và chuyên nghiệp trong ứng dụng LinguLearn.
+- Ngôn ngữ học viên đang học: ${actualLang}.
+- Trình độ hiện tại của học viên (CEFR): ${actualLevel}.
+
+Nhiệm vụ của bạn:
+1. Trả lời tự nhiên, giao tiếp duy trì hội thoại bằng ${actualLang} sao cho phù hợp với trình độ ${actualLevel}. Hãy đặt thêm 1 câu hỏi mở hoặc gợi ý tình huống để người học hào hứng tiếp tục cuộc trò chuyện.
+2. Kiểm tra câu của học viên:
+   - Nếu câu của học viên có lỗi sai ngữ pháp, dùng từ chưa chuẩn, hoặc diễn đạt chưa tự nhiên: Hãy viết lại câu đó chuẩn xác và tự nhiên hơn vào trường "correctedGrammar", đồng thời giải thích ngắn gọn, dễ hiểu bằng tiếng Việt vào trường "explanation".
+   - Nếu câu của học viên đã đúng hoàn toàn về ngữ pháp và từ vựng: BẮT BUỘC trả về chuỗi rỗng "" cho "correctedGrammar" và chuỗi rỗng "" cho "explanation".
+
+QUY TẮC BẮT BUỘC:
+Trả về DUY NHẤT một chuỗi JSON hợp lệ (không kèm theo markdown \`\`\`json hoặc bất kỳ ký tự nào khác bên ngoài), tuân theo đúng cấu trúc 3 trường sau:
 {
-  "tutorResponse": "câu trả lời của bạn gửi cho học viên bằng ngôn ngữ học viên đang học",
-  "hasGrammarMistake": true/false,
-  "correction": {
-    "original": "phần sai của học viên",
-    "corrected": "cách viết chuẩn xác",
-    "explanationVi": "giải thích chi tiết bằng tiếng Việt"
-  } // hoặc null nếu học viên viết đúng hoàn toàn
+  "reply": "Câu trả lời của bạn tiếp nối câu chuyện bằng ${actualLang}",
+  "correctedGrammar": "Câu đã được sửa lại cho đúng và tự nhiên hơn (hoặc chuỗi rỗng \"\" nếu câu gốc đã chuẩn)",
+  "explanation": "Giải thích ngắn gọn lỗi ngữ pháp bằng tiếng Việt (hoặc chuỗi rỗng \"\" nếu câu gốc đã chuẩn)"
 }
-`;
+`.trim();
+
+  // Chuẩn bị danh sách contents phù hợp định dạng Gemini REST API
+  const formattedContents = [];
+
+  // Nạp lịch sử hội thoại trước đó (nếu có)
+  if (Array.isArray(actualHistory) && actualHistory.length > 0) {
+    for (const msg of actualHistory) {
+      const role =
+        msg.role === "model" || msg.role === "assistant" ? "model" : "user";
+      const text = msg.text || msg.content || "";
+      if (text.trim()) {
+        formattedContents.push({
+          role,
+          parts: [{ text }],
+        });
+      }
+    }
+  }
+
+  // Thêm tin nhắn hiện tại của học viên
+  formattedContents.push({
+    role: "user",
+    parts: [{ text: actualMessage }],
+  });
+
+  const requestBody = {
+    systemInstruction: {
+      parts: [{ text: systemInstructionText }],
+    },
+    contents: formattedContents,
+    generationConfig: {
+      responseMimeType: "application/json",
+      temperature: 0.7,
+    },
+  };
 
   try {
-    const chat = model.startChat({
-      history: history.map((item) => ({
-        role: item.role === "user" ? "user" : "model",
-        parts: [{ text: item.text }],
-      })),
-      generationConfig: {
-        responseMimeType: "application/json",
-        temperature: 0.7,
+    const response = await fetch(`${GEMINI_API_BASE_URL}?key=${apiKey}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
       },
+      body: JSON.stringify(requestBody),
     });
 
-    const prompt = `${systemInstruction}\n\nTin nhắn người học: "${userMessage}"`;
-    const result = await chat.sendMessage(prompt);
-    const responseText = result.response.text();
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const errorMsg =
+        errorData?.error?.message ||
+        `Lỗi từ Gemini API (Mã phản hồi HTTP: ${response.status})`;
+      throw new Error(errorMsg);
+    }
 
-    return extractJsonFromResponse(responseText);
+    const data = await response.json();
+    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!rawText) {
+      throw new Error("Không nhận được phản hồi từ mô hình AI.");
+    }
+
+    // Làm sạch và bóc tách dữ liệu JSON
+    const cleanJson = rawText
+      .replace(/```json/gi, "")
+      .replace(/```/g, "")
+      .trim();
+
+    const parsedResult = JSON.parse(cleanJson);
+
+    return {
+      reply: parsedResult.reply || "",
+      correctedGrammar: parsedResult.correctedGrammar || "",
+      explanation: parsedResult.explanation || "",
+    };
   } catch (error) {
-    console.error("Lỗi chatWithAITutor:", error);
+    console.error("Lỗi khi gọi Gemini REST API trong sendMessageToTutor:", error);
     throw error;
   }
 };
 
 /**
- * 2. Phân tích ngữ pháp chuyên sâu (Grammar Correction Tool)
- * Phân tích một câu cụ thể, chỉ ra cấu trúc ngữ pháp và từ vựng thay thế tự nhiên hơn.
- * @param {string} sentence - Câu người dùng nhập
- * @param {string} targetLanguage - Ngôn ngữ mục tiêu
+ * Alias tương thích ngược cho useTutorStore
+ */
+export const chatWithAITutor = async (params) => {
+  const result = await sendMessageToTutor(params);
+  return {
+    tutorResponse: result.reply,
+    hasGrammarMistake: Boolean(result.correctedGrammar),
+    correction: result.correctedGrammar
+      ? {
+          original: params.userMessage || "",
+          corrected: result.correctedGrammar,
+          explanationVi: result.explanation,
+        }
+      : null,
+  };
+};
+
+/**
+ * 2. Phân tích ngữ pháp chuyên sâu (Dành cho công cụ kiểm tra câu đơn lẻ)
  */
 export const analyzeAndCorrectGrammar = async (
   sentence,
-  targetLanguage = "Tiếng Anh"
+  targetLanguage = "English"
 ) => {
-  const model = getModel();
-
-  if (!model) {
+  const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+  if (!apiKey) {
     return {
       isCorrect: true,
       originalSentence: sentence,
       correctedSentence: sentence,
-      explanation: "Vui lòng cấu hình EXPO_PUBLIC_GEMINI_API_KEY để kiểm tra ngữ pháp thực tế.",
+      explanation: "Vui lòng cấu hình EXPO_PUBLIC_GEMINI_API_KEY để kiểm tra ngữ pháp.",
       betterAlternatives: [],
     };
   }
 
   const prompt = `
-Hãy đóng vai chuyên gia ngôn ngữ học. Hãy phân tích ngữ pháp cho câu sau trong ${targetLanguage}:
-"${sentence}"
-
-Yêu cầu trả về duy nhất định dạng JSON:
+Phân tích ngữ pháp cho câu sau trong ${targetLanguage}: "${sentence}".
+Trả về duy nhất JSON:
 {
   "isCorrect": true/false,
   "originalSentence": "${sentence}",
-  "correctedSentence": "câu đã được sửa đúng hoàn toàn",
-  "explanation": "giải thích chi tiết lỗi sai và quy tắc ngữ pháp bằng tiếng Việt",
-  "betterAlternatives": [
-    "cách diễn đạt tự nhiên hơn 1 của người bản xứ",
-    "cách diễn đạt tự nhiên hơn 2"
-  ]
+  "correctedSentence": "câu đã được sửa đúng",
+  "explanation": "giải thích chi tiết bằng tiếng Việt",
+  "betterAlternatives": ["cách diễn đạt tự nhiên hơn 1", "cách diễn đạt tự nhiên hơn 2"]
 }
 `;
 
   try {
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: {
-        responseMimeType: "application/json",
-        temperature: 0.2,
-      },
+    const response = await fetch(`${GEMINI_API_BASE_URL}?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.2,
+        },
+      }),
     });
 
-    return extractJsonFromResponse(result.response.text());
-  } catch (error) {
-    console.error("Lỗi analyzeAndCorrectGrammar:", error);
-    throw error;
+    const data = await response.json();
+    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+    const cleanJson = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
+    return JSON.parse(cleanJson);
+  } catch (err) {
+    console.error("Lỗi analyzeAndCorrectGrammar:", err);
+    throw err;
   }
 };
 
 /**
- * 3. Sinh bài tập trắc nghiệm thích ứng theo năng lực (Adaptive Quiz Generator)
- * Tự động tạo câu hỏi trắc nghiệm dựa theo chủ đề và trình độ CEFR.
- * @param {string} topic - Chủ đề bài học (Daily Routine, Travel, Business...)
- * @param {string} level - Cấp độ CEFR (A1, A2, B1, B2, C1)
- * @param {number} numberOfQuestions - Số lượng câu hỏi cần sinh (mặc định 5)
+ * 3. Sinh bài tập trắc nghiệm thích ứng
  */
 export const generateAdaptiveQuiz = async ({
   topic = "Daily Conversation",
   level = "B1",
   numberOfQuestions = 5,
 }) => {
-  const model = getModel();
-
-  if (!model) {
-    // Dữ liệu mẫu giả lập
+  const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+  if (!apiKey) {
     return {
       topic,
       level,
@@ -176,54 +235,49 @@ export const generateAdaptiveQuiz = async ({
           question: "She _____ to the gym every morning before work.",
           options: ["go", "goes", "going", "went"],
           correctAnswerIndex: 1,
-          explanation: "Chủ ngữ ngôi thứ 3 số ít 'She' ở thì hiện tại đơn đi với động từ thêm -es (goes).",
-        },
-        {
-          id: 2,
-          question: "If I _____ more free time, I would learn another language.",
-          options: ["have", "had", "will have", "would have"],
-          correctAnswerIndex: 1,
-          explanation: "Câu điều kiện loại 2 diễn tả giả định trái với hiện tại: If + S + V2/ed, S + would + V.",
+          explanation: "Chủ ngữ ngôi thứ 3 số ít 'She' ở hiện tại đơn đi với động từ thêm -es (goes).",
         },
       ],
     };
   }
 
   const prompt = `
-Bạn là hệ thống tạo đề thi đánh giá năng lực ngoại ngữ cho ứng dụng LinguLearn.
-Hãy tạo ${numberOfQuestions} câu hỏi trắc nghiệm tiếng Anh cho:
-- Chủ đề: ${topic}
-- Trình độ CEFR: ${level}
-
-Yêu cầu trả về DUY NHẤT một chuỗi JSON hợp lệ với cấu trúc sau:
+Tạo ${numberOfQuestions} câu hỏi trắc nghiệm tiếng Anh cho chủ đề: ${topic}, cấp độ CEFR: ${level}.
+Trả về duy nhất JSON:
 {
   "topic": "${topic}",
   "level": "${level}",
   "questions": [
     {
       "id": 1,
-      "question": "Nội dung câu hỏi trắc nghiệm (điền vào chỗ trống hoặc chọn câu đúng)",
-      "options": ["Đáp án A", "Đáp án B", "Đáp án C", "Đáp án D"],
-      "correctAnswerIndex": 0, // chỉ số từ 0 đến 3 của đáp án đúng
-      "explanation": "Giải thích chi tiết tại sao đúng và quy tắc ngữ pháp liên quan bằng tiếng Việt"
+      "question": "Nội dung câu hỏi",
+      "options": ["A", "B", "C", "D"],
+      "correctAnswerIndex": 0,
+      "explanation": "Giải thích bằng tiếng Việt"
     }
   ]
 }
 `;
 
   try {
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: {
-        responseMimeType: "application/json",
-        temperature: 0.4,
-      },
+    const response = await fetch(`${GEMINI_API_BASE_URL}?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.4,
+        },
+      }),
     });
 
-    return extractJsonFromResponse(result.response.text());
-  } catch (error) {
-    console.error("Lỗi generateAdaptiveQuiz:", error);
-    throw error;
+    const data = await response.json();
+    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+    const cleanJson = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
+    return JSON.parse(cleanJson);
+  } catch (err) {
+    console.error("Lỗi generateAdaptiveQuiz:", err);
+    throw err;
   }
 };
-

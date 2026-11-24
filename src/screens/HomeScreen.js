@@ -1,9 +1,11 @@
 import React from "react";
 import { View, Text, TouchableOpacity, SafeAreaView, Alert } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import { signOut } from "firebase/auth";
 import { auth } from "../services/firebaseConfig";
 
 export const HomeScreen = () => {
+  const navigation = useNavigation();
   const currentUser = auth.currentUser;
 
   const handleLogout = async () => {
@@ -36,12 +38,22 @@ export const HomeScreen = () => {
           </Text>
         </View>
 
+        {/* Nút vào phòng luyện giao tiếp cùng Gia sư AI */}
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate("Chat")}
+          className="w-full bg-blue-600 active:bg-blue-700 py-4 rounded-xl items-center justify-center shadow-md shadow-blue-200 mb-3"
+        >
+          <Text className="text-white font-bold text-base">💬 Luyện giao tiếp cùng Gia sư AI</Text>
+        </TouchableOpacity>
+
+        {/* Nút Đăng xuất */}
         <TouchableOpacity
           activeOpacity={0.8}
           onPress={handleLogout}
-          className="w-full bg-red-500 active:bg-red-600 py-3.5 rounded-xl items-center justify-center shadow-sm"
+          className="w-full bg-slate-100 active:bg-slate-200 py-3.5 rounded-xl items-center justify-center"
         >
-          <Text className="text-white font-bold text-base">Đăng xuất</Text>
+          <Text className="text-slate-600 font-semibold text-sm">Đăng xuất</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -49,4 +61,3 @@ export const HomeScreen = () => {
 };
 
 export default HomeScreen;
-
