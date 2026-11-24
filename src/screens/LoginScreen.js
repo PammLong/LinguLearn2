@@ -12,6 +12,8 @@ import {
   ScrollView,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import { signInAnonymously } from "firebase/auth";
+import { auth } from "../services/firebaseConfig";
 import { loginUser } from "../services/authService";
 import { useAuthStore } from "../store/useAuthStore";
 
@@ -51,15 +53,37 @@ export const LoginScreen = () => {
     }
   };
 
-  const handleGuestLogin = () => {
-    if (setUser) {
-      setUser({
-        uid: "guest_123",
-        displayName: "Khách trải nghiệm",
-        email: "guest@lingulearn.com",
-        targetLanguage: "English",
-        currentLevel: "B1",
-      });
+  const handleGuestLogin = async () => {
+    try {
+      setLoading(true);
+      // Thử đăng nhập ẩn danh bằng Firebase Auth nếu được bật
+      const userCredential = await signInAnonymously(auth);
+      const guestUser = userCredential.user;
+      if (setUser) {
+        setUser({
+          uid: guestUser.uid,
+          displayName: "Khách trải nghiệm",
+          email: "guest@lingulearn.com",
+          targetLanguage: "English",
+          currentLevel: "B1",
+          isAnonymous: true,
+        });
+      }
+    } catch (error) {
+      console.warn("Chế độ ẩn danh Firebase chưa bật, dùng phiên khách cục bộ:", error.message);
+      // Fallback: Thiết lập user khách trong Zustand store để vào thẳng app
+      if (setUser) {
+        setUser({
+          uid: "guest_" + Date.now().toString(36),
+          displayName: "Khách trải nghiệm",
+          email: "guest@lingulearn.com",
+          targetLanguage: "English",
+          currentLevel: "B1",
+          isAnonymous: true,
+        });
+      }
+    } finally {
+      setLoading(false);
     }
   };
 

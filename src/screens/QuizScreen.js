@@ -4,19 +4,31 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  SafeAreaView,
   ActivityIndicator,
   Alert,
+  Platform,
+  StatusBar,
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { auth } from "../services/firebaseConfig";
+import { useAuthStore } from "../store/useAuthStore";
 import { generateAdaptiveQuiz, saveQuizResult } from "../services/quizService";
 
 export const QuizScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
-  const currentUser = auth.currentUser;
+  const insets = useSafeAreaInsets();
+
+  const storeUser = useAuthStore((state) => state.user);
+  const currentUser = auth.currentUser || storeUser;
   const uid = currentUser?.uid || "guest_user";
+
+  const topSafePadding =
+    Math.max(
+      insets.top,
+      Platform.OS === "android" ? (StatusBar.currentHeight || 28) : 20
+    ) + 8;
 
   // Lấy dữ liệu truyền từ màn hình trước (nếu có ngữ cảnh lỗi sai từ Chat)
   const initialMistakes = route.params?.mistakesContext || [];
@@ -148,7 +160,7 @@ export const QuizScreen = () => {
   // ==========================================
   if (quizState === "setup") {
     return (
-      <SafeAreaView className="flex-1 bg-slate-50">
+      <View style={{ paddingTop: topSafePadding }} className="flex-1 bg-slate-50">
         <ScrollView className="flex-1 p-5" showsVerticalScrollIndicator={false}>
           {/* Header */}
           <View className="flex-row items-center mb-6">
@@ -267,7 +279,7 @@ export const QuizScreen = () => {
             </Text>
           </TouchableOpacity>
         </ScrollView>
-      </SafeAreaView>
+      </View>
     );
   }
 
@@ -276,7 +288,7 @@ export const QuizScreen = () => {
   // ==========================================
   if (quizState === "loading") {
     return (
-      <SafeAreaView className="flex-1 bg-slate-50 items-center justify-center p-6">
+      <View style={{ paddingTop: topSafePadding }} className="flex-1 bg-slate-50 items-center justify-center p-6">
         <View className="w-20 h-20 bg-blue-100 rounded-full items-center justify-center mb-4">
           <ActivityIndicator size="large" color="#2563eb" />
         </View>
@@ -286,7 +298,7 @@ export const QuizScreen = () => {
         <Text className="text-xs text-slate-500 text-center leading-relaxed max-w-xs">
           Đang tổng hợp các câu hỏi theo trình độ {selectedLevel} và chủ đề "{selectedTopic}".
         </Text>
-      </SafeAreaView>
+      </View>
     );
   }
 
@@ -299,7 +311,7 @@ export const QuizScreen = () => {
     const isPassed = percentage >= 60;
 
     return (
-      <SafeAreaView className="flex-1 bg-slate-50 justify-center items-center p-6">
+      <View style={{ paddingTop: topSafePadding }} className="flex-1 bg-slate-50 justify-center items-center p-6">
         <View className="bg-white rounded-3xl p-6 w-full items-center shadow-sm border border-slate-100">
           <Text className="text-5xl mb-3">{isPassed ? "🎉" : "💪"}</Text>
           <Text className="text-2xl font-bold text-slate-800 mb-1">
@@ -347,7 +359,7 @@ export const QuizScreen = () => {
             </Text>
           </TouchableOpacity>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
@@ -361,7 +373,7 @@ export const QuizScreen = () => {
       : 0;
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50">
+    <View style={{ paddingTop: topSafePadding }} className="flex-1 bg-slate-50">
       <ScrollView className="flex-1 p-5" showsVerticalScrollIndicator={false}>
         {/* Header tiến trình */}
         <View className="flex-row justify-between items-center mb-2">
@@ -482,7 +494,7 @@ export const QuizScreen = () => {
           </TouchableOpacity>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 };
 

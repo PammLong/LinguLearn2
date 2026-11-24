@@ -3,6 +3,7 @@ import { View, ActivityIndicator } from "react-native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "../services/firebaseConfig";
+import { useAuthStore } from "../store/useAuthStore";
 import { LoginScreen } from "../screens/LoginScreen";
 import { RegisterScreen } from "../screens/RegisterScreen";
 import { HomeScreen } from "../screens/HomeScreen";
@@ -14,12 +15,17 @@ const Stack = createNativeStackNavigator();
 export const AppNavigator = () => {
   // 1. Quản lý trạng thái khởi tạo (initializing) và thông tin user hiện tại
   const [initializing, setInitializing] = useState(true);
-  const [user, setUser] = useState(null);
+  const [firebaseUser, setFirebaseUser] = useState(null);
+  const storeUser = useAuthStore((state) => state.user);
+  const setStoreUser = useAuthStore((state) => state.setUser);
 
   // 2. Lắng nghe thay đổi trạng thái đăng nhập từ Firebase Auth
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
+      setFirebaseUser(currentUser);
+      if (currentUser) {
+        setStoreUser(currentUser);
+      }
       if (initializing) {
         setInitializing(false);
       }
@@ -28,6 +34,9 @@ export const AppNavigator = () => {
     // Cleanup listener khi component unmount
     return unsubscribe;
   }, []);
+
+  // Người dùng hiện tại có thể từ Firebase Auth hoặc từ Zustand store (ví dụ: chế độ Khách)
+  const activeUser = firebaseUser || storeUser;
 
   // 3. Hiển thị màn hình loading chờ Firebase kiểm tra phiên đăng nhập
   if (initializing) {
@@ -41,7 +50,7 @@ export const AppNavigator = () => {
   // 4. Phân luồng điều hướng dựa trên trạng thái user
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {user ? (
+      {activeUser ? (
         // Khi đã đăng nhập (user tồn tại)
         <>
           <Stack.Screen name="Home" component={HomeScreen} />
@@ -49,7 +58,7 @@ export const AppNavigator = () => {
           <Stack.Screen name="Quiz" component={QuizScreen} />
         </>
       ) : (
-        // Khi chưa đăng nhập (!user)
+        // Khi chưa đăng nhập (!activeUser)
         <>
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="Register" component={RegisterScreen} />

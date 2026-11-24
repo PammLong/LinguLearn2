@@ -4,12 +4,15 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  SafeAreaView,
   Alert,
+  Platform,
+  StatusBar,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { signOut } from "firebase/auth";
 import { auth } from "../services/firebaseConfig";
+import { useAuthStore } from "../store/useAuthStore";
 import {
   subscribeToUserProgress,
   subscribeToRecentExercises,
@@ -17,7 +20,11 @@ import {
 
 export const HomeScreen = () => {
   const navigation = useNavigation();
-  const currentUser = auth.currentUser;
+  const insets = useSafeAreaInsets();
+
+  const storeUser = useAuthStore((state) => state.user);
+  const logoutStore = useAuthStore((state) => state.logout);
+  const currentUser = auth.currentUser || storeUser;
   const uid = currentUser?.uid || "guest_user";
 
   // Lấy tên hiển thị hoặc trích xuất từ email
@@ -53,7 +60,7 @@ export const HomeScreen = () => {
     };
   }, [uid]);
 
-  // Xử lý đăng xuất
+  // Xử lý đăng xuất tài khoản
   const handleLogout = () => {
     Alert.alert("Đăng xuất", "Bạn có chắc chắn muốn đăng xuất khỏi tài khoản?", [
       { text: "Hủy", style: "cancel" },
@@ -64,8 +71,10 @@ export const HomeScreen = () => {
           try {
             await signOut(auth);
           } catch (error) {
-            console.error("Lỗi đăng xuất:", error);
-            Alert.alert("Lỗi", "Không thể đăng xuất lúc này. Vui lòng thử lại!");
+            console.error("Lỗi đăng xuất Firebase:", error);
+          }
+          if (logoutStore) {
+            logoutStore();
           }
         },
       },
@@ -90,52 +99,77 @@ export const HomeScreen = () => {
     return `${date.getDate()}/${date.getMonth() + 1}, ${timeStr}`;
   };
 
+  // Tính khoảng cách an toàn cho Header tránh notch, camera và status bar
+  const topSafePadding =
+    Math.max(
+      insets.top,
+      Platform.OS === "android" ? (StatusBar.currentHeight || 28) : 20
+    ) + 14;
+
   return (
-    <SafeAreaView className="flex-1 bg-slate-50">
+    <View className="flex-1 bg-slate-50">
       <ScrollView
         className="flex-1"
         contentContainerStyle={{
-          paddingHorizontal: 16,
-          paddingTop: 12,
-          paddingBottom: 40,
+          paddingTop: topSafePadding,
+          paddingHorizontal: 18,
+          paddingBottom: Math.max(insets.bottom, 24) + 30,
         }}
         showsVerticalScrollIndicator={false}
       >
         {/* ======================================================== */}
-        {/* 1. HEADER NGƯỜI DÙNG */}
+        {/* 1. HEADER NGƯỜI DÙNG - THIẾT KẾ RỘNG RÃI & SANG TRỌNG */}
         {/* ======================================================== */}
-        <View className="flex-row items-center justify-between mb-5">
-          <View className="flex-row items-center flex-1 mr-2">
-            <View className="w-12 h-12 rounded-2xl bg-blue-100 items-center justify-center mr-3 border border-blue-200 shadow-xs">
-              <Text className="text-2xl">🎓</Text>
-            </View>
-            <View className="flex-1">
-              <Text className="text-xs text-slate-400 font-medium">
-                Chào mừng trở lại 👋
-              </Text>
-              <Text
-                numberOfLines={1}
-                className="text-lg font-extrabold text-slate-800"
-              >
-                {displayName}
-              </Text>
-              <View className="flex-row items-center mt-0.5">
-                <View className="w-1.5 h-1.5 rounded-full bg-blue-600 mr-1.5" />
-                <Text className="text-[11px] font-semibold text-blue-600">
-                  Mục tiêu: Tiếng Anh • Cấp độ B1
+        <View className="bg-white rounded-3xl p-5 mb-5 shadow-xs border border-slate-100">
+          <View className="flex-row items-center justify-between mb-3.5">
+            <View className="flex-row items-center flex-1 mr-3">
+              {/* Avatar nổi bật */}
+              <View className="w-13 h-13 rounded-2xl bg-blue-600 items-center justify-center mr-3.5 shadow-md shadow-blue-200">
+                <Text className="text-2xl text-white">🎓</Text>
+              </View>
+
+              {/* Lời chào & Tên người dùng */}
+              <View className="flex-1">
+                <Text className="text-xs text-slate-400 font-semibold uppercase tracking-wider">
+                  Chào mừng trở lại 👋
+                </Text>
+                <Text
+                  numberOfLines={1}
+                  className="text-2xl font-black text-slate-800 tracking-tight mt-0.5"
+                >
+                  {displayName}
                 </Text>
               </View>
             </View>
+
+            {/* Nút Đăng xuất gọn gàng */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={handleLogout}
+              className="bg-red-50 border border-red-200/80 px-3.5 py-2 rounded-xl items-center justify-center"
+            >
+              <Text className="text-red-600 text-xs font-bold">Đăng xuất</Text>
+            </TouchableOpacity>
           </View>
 
-          {/* Nút Đăng xuất gọn gàng */}
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={handleLogout}
-            className="bg-red-50 border border-red-200 px-3 py-1.5 rounded-xl items-center justify-center"
-          >
-            <Text className="text-red-600 text-xs font-bold">Đăng xuất</Text>
-          </TouchableOpacity>
+          {/* Dải nhãn thông tin Mục tiêu & Cấp độ */}
+          <View className="flex-row flex-wrap items-center gap-2 pt-3 border-t border-slate-100">
+            <View className="bg-blue-50 border border-blue-200/60 px-3 py-1.5 rounded-full flex-row items-center">
+              <Text className="text-xs mr-1.5">🇬🇧</Text>
+              <Text className="text-xs font-bold text-blue-700">Tiếng Anh</Text>
+            </View>
+
+            <View className="bg-amber-50 border border-amber-200/60 px-3 py-1.5 rounded-full flex-row items-center">
+              <Text className="text-xs mr-1.5">⭐</Text>
+              <Text className="text-xs font-bold text-amber-700">Cấp độ B1</Text>
+            </View>
+
+            {currentUser?.isAnonymous && (
+              <View className="bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-full flex-row items-center">
+                <Text className="text-xs font-semibold text-slate-600">Khách</Text>
+              </View>
+            )}
+          </View>
         </View>
 
         {/* ======================================================== */}
@@ -337,7 +371,7 @@ export const HomeScreen = () => {
           </View>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 };
 
