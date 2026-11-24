@@ -15,6 +15,7 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import { auth } from "../services/firebaseConfig";
 import { saveMessage, subscribeToMessages } from "../services/chatService";
 import { sendMessageToTutor } from "../services/llmService";
+import { updateUserProgress } from "../services/progressService";
 
 export const ChatScreen = () => {
   const navigation = useNavigation();
@@ -71,7 +72,7 @@ export const ChatScreen = () => {
         text: msg.text,
       }));
 
-      // 4.3 Gọi dịch vụ Gemini LLM
+      // 4.3 Gọi dịch vụ Gemini LLM (gemini-2.5-flash)
       const aiResponse = await sendMessageToTutor(
         textToSend,
         targetLanguage,
@@ -87,6 +88,13 @@ export const ChatScreen = () => {
         explanation: aiResponse.explanation || "",
         timestamp: Date.now(),
       });
+
+      // 4.5 Thưởng +5 điểm tích lũy và duy trì chuỗi ngày streak khi hoàn thành 1 lượt chat với AI
+      if (uid && uid !== "guest_user") {
+        updateUserProgress(uid, 5).catch((err) =>
+          console.warn("Không thể cộng điểm chat:", err)
+        );
+      }
     } catch (error) {
       console.error("Lỗi quy trình chat:", error);
       Alert.alert(
@@ -282,4 +290,3 @@ export const ChatScreen = () => {
 };
 
 export default ChatScreen;
-

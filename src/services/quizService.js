@@ -1,5 +1,6 @@
 import { database } from "./firebaseConfig";
 import { ref, push, set } from "firebase/database";
+import { updateUserProgress } from "./progressService";
 
 const GEMINI_API_BASE_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
@@ -166,7 +167,7 @@ Trả về DUY NHẤT một chuỗi JSON hợp lệ với cấu trúc đối tư
       ? parsed
       : parsed.questions || [];
 
-    // Gán thêm thuộc tính để tương thích linh hoạt với cả 2 cách lấy dữ liệu (Array hoặc .questions)
+    // Gán thêm thuộc tính linh hoạt để tương thích với cả dạng Array hoặc object.questions
     questionsArray.questions = questionsArray;
     questionsArray.topic = topic;
     questionsArray.level = level;
@@ -181,6 +182,7 @@ Trả về DUY NHẤT một chuỗi JSON hợp lệ với cấu trúc đối tư
 /**
  * 2. Lưu kết quả bài tập trắc nghiệm vào Firebase Realtime Database
  * Nhánh lưu trữ: exercises/${uid}
+ * Tự động tích hợp updateUserProgress để cộng dồn điểm (score * 10) và cập nhật streak
  * 
  * @param {string} uid - ID người dùng (Firebase Auth UID)
  * @param {object} resultData - Dữ liệu kết quả làm bài
@@ -218,6 +220,13 @@ export const saveQuizResult = async (uid, resultData) => {
 
     await set(newExerciseRef, payload);
 
+    // Tự động gọi updateUserProgress để cộng dồn điểm (mỗi câu đúng +10 điểm) và tính streak
+    if (uid && uid !== "guest_user") {
+      updateUserProgress(uid, (payload.score || 0) * 10).catch((err) =>
+        console.warn("Không thể cập nhật userProgress trong saveQuizResult:", err)
+      );
+    }
+
     return {
       id: newExerciseRef.key,
       ...payload,
@@ -227,4 +236,3 @@ export const saveQuizResult = async (uid, resultData) => {
     throw error;
   }
 };
-
