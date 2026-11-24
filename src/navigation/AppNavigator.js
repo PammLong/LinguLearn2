@@ -7,6 +7,7 @@ import { LoginScreen } from "../screens/LoginScreen";
 import { RegisterScreen } from "../screens/RegisterScreen";
 import { HomeScreen } from "../screens/HomeScreen";
 import { ChatScreen } from "../screens/ChatScreen";
+import { QuizScreen } from "../screens/QuizScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -45,6 +46,7 @@ export const AppNavigator = () => {
         <>
           <Stack.Screen name="Home" component={HomeScreen} />
           <Stack.Screen name="Chat" component={ChatScreen} />
+          <Stack.Screen name="Quiz" component={QuizScreen} />
         </>
       ) : (
         // Khi chưa đăng nhập (!user)
